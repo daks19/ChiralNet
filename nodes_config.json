@@ -1,0 +1,13 @@
+{
+  "_comment": "Map each ESP32's device_id (MAC with colons stripped) to a position on your floor plan. x/y are in arbitrary units (e.g. meters) matching floor_width/floor_height below. Add one entry per physical node. Unknown device_ids that publish data will still show in the live table, just not on the heatmap until you add them here.",
+
+  "floor_width": 12,
+  "floor_height": 8,
+  "floor_label": "Your building layout (edit floor_width/floor_height to match real dimensions in meters)",
+
+  "nodes": {
+    "B4BFE90E08E4": { "label": "Node 1", "x": 2, "y": 2 },
+    "A4F00F6195B4": { "label": "Node 2 (rough - fine-tune)", "x": 9, "y": 2 },
+    "6809479B7E38": { "label": "Node 3 (rough - fine-tune)", "x": 5.5, "y": 6.5 }
+  }
+}

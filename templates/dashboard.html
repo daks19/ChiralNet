@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ChiralNet Dashboard</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --good: #22c55e;
+    --warn: #eab308;
+    --bad: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); margin-bottom: 24px; font-size: 14px; }
+  .layout {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .panel h2 { font-size: 15px; margin: 0 0 12px 0; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  .rssi-good { color: var(--good); font-weight: 600; }
+  .rssi-warn { color: var(--warn); font-weight: 600; }
+  .rssi-bad { color: var(--bad); font-weight: 600; }
+  img#heatmap { width: 100%; border-radius: 6px; display: block; }
+  .empty-state { color: var(--muted); font-size: 13px; padding: 20px 0; }
+  .status-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--good); margin-right: 6px; animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  .diag-card {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--muted);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    background: #16213a;
+  }
+  .diag-card.good { border-left-color: var(--good); }
+  .diag-card.warning { border-left-color: var(--warn); }
+  .diag-card.critical { border-left-color: var(--bad); }
+  .diag-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .diag-device { font-size: 12px; color: var(--muted); }
+  .diag-title { font-size: 15px; font-weight: 700; }
+  .diag-confidence { font-size: 12px; color: var(--muted); }
+  .diag-reasoning { font-size: 12px; color: var(--muted); margin: 6px 0; }
+  .diag-reasoning span { display: inline-block; margin-right: 12px; }
+  .diag-action {
+    font-size: 13px; margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .diag-action strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+  <h1><span class="status-dot"></span>ChiralNet Live Dashboard</h1>
+  <div class="subtitle">Auto-refreshes every 1 second &middot; reading from chiralnet.db</div>
+
+  <div class="layout">
+    <div class="panel">
+      <h2>Live Node Metrics</h2>
+      <div id="table-container">
+        <div class="empty-state">Waiting for data...</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>RSSI Heatmap</h2>
+      <img id="heatmap" src="/api/heatmap.png" alt="RSSI heatmap">
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top: 20px;">
+    <h2>Diagnostic Engine — Root Cause Analysis</h2>
+    <div id="diagnosis-container">
+      <div class="empty-state">Waiting for data...</div>
+    </div>
+  </div>
+
+<script>
+function rssiClass(rssi) {
+  if (rssi >= -60) return "rssi-good";
+  if (rssi >= -75) return "rssi-warn";
+  return "rssi-bad";
+}
+
+function fmt(val, suffix) {
+  if (val === null || val === undefined) return "-";
+  return val + (suffix || "");
+}
+
+async function refreshTable() {
+  try {
+    const res = await fetch("/api/latest");
+    const rows = await res.json();
+    const container = document.getElementById("table-container");
+
+    if (!rows.length) {
+      container.innerHTML = '<div class="empty-state">No readings yet — waiting for a node to publish.</div>';
+      return;
+    }
+
+    let html = `<table>
+      <thead><tr>
+        <th>Device</th><th>SSID</th><th>RSSI</th>
+        <th>Latency (last)</th><th>Latency (avg 10)</th>
+        <th>Loss (last)</th><th>Loss (avg 10)</th>
+        <th>APs</th><th>Last seen</th>
+      </tr></thead><tbody>`;
+
+    for (const r of rows) {
+      html += `<tr>
+        <td>${r.device_id}</td>
+        <td>${r.ssid ?? "-"}</td>
+        <td class="${rssiClass(r.rssi)}">${fmt(r.rssi, " dBm")}</td>
+        <td>${fmt(r.latency_ms, " ms")}</td>
+        <td>${fmt(r.avg_latency_ms, " ms")}</td>
+        <td>${fmt(r.packet_loss, "%")}</td>
+        <td>${fmt(r.avg_packet_loss, "%")}</td>
+        <td>${fmt(r.nearby_aps)}</td>
+        <td>${r.received_at ? r.received_at.split(".")[0] : "-"}</td>
+      </tr>`;
+    }
+    html += "</tbody></table>";
+    html += `<p style="color:#94a3b8; font-size:12px; margin-top:10px;">
+      "last" = most recent single reading (fast, 1s cycle, noisier since
+      pingCount=1). "avg 10" = rolling average over the last 10 readings
+      per node (smoother, better for diagnosis).</p>`;
+    container.innerHTML = html;
+  } catch (e) {
+    console.error("Failed to refresh table:", e);
+  }
+}
+
+function refreshHeatmap() {
+  document.getElementById("heatmap").src = "/api/heatmap.png?t=" + Date.now();
+}
+
+async function refreshDiagnosis() {
+  try {
+    const res = await fetch("/api/diagnosis");
+    const diagnoses = await res.json();
+    const container = document.getElementById("diagnosis-container");
+
+    if (!diagnoses.length) {
+      container.innerHTML = '<div class="empty-state">No readings yet.</div>';
+      return;
+    }
+
+    let html = "";
+    for (const d of diagnoses) {
+      html += `<div class="diag-card ${d.severity}">
+        <div class="diag-header">
+          <div>
+            <span class="diag-device">${d.device_id} (${d.ssid ?? "-"})</span><br>
+            <span class="diag-title">${d.diagnosis}</span>
+          </div>
+          <div class="diag-confidence">${d.confidence}% confidence</div>
+        </div>
+        <div class="diag-reasoning">
+          ${d.reasoning.map(r => `<span>${r}</span>`).join("")}
+        </div>
+        <div class="diag-action"><strong>Suggested action:</strong> ${d.action}</div>
+      </div>`;
+    }
+    container.innerHTML = html;
+  } catch (e) {
+    console.error("Failed to refresh diagnosis:", e);
+  }
+}
+
+refreshTable();
+refreshDiagnosis();
+setInterval(refreshTable, 1000);
+setInterval(refreshHeatmap, 1000);
+setInterval(refreshDiagnosis, 1000);
+</script>
+
+</body>
+</html>
