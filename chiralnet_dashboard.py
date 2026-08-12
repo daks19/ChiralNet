@@ -36,8 +36,10 @@ app = Flask(__name__)
 
 node_modes = {}
 critical_counts = {}
+manual_overrides = {}  # device_id -> timestamp of last manual mode switch
 CRITICAL_THRESHOLD = 3
 AUTO_LOG = []
+import time
 
 
 def send_command(device_id, mode):
@@ -275,6 +277,7 @@ def api_set_mode(device_id):
     try:
         send_command(device_id, mode)
         critical_counts[device_id] = 0
+        manual_overrides[device_id] = time.time()  # Protect from auto-trigger for 5 min
         return jsonify({"status": "sent", "device_id": device_id, "mode": mode})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -298,6 +301,7 @@ def api_latest():
             row["avg_latency_ms"] = avg["avg_latency_ms"]
             row["avg_packet_loss"] = avg["avg_packet_loss"]
             row["avg_sample_count"] = avg["sample_count"]
+        row["mode"] = node_modes.get(row["device_id"], "monitor")
     return jsonify(latest)
 
 
@@ -331,6 +335,14 @@ def api_diagnosis():
             critical_counts[device_id] = critical_counts.get(device_id, 0) + 1
         else:
             critical_counts[device_id] = 0
+
+        # Skip auto-trigger if manual override is active (5 min protection)
+        manual_ts = manual_overrides.get(device_id, 0)
+        if time.time() - manual_ts < 300:
+            diag["mode"] = current_mode
+            diag["critical_streak"] = critical_counts.get(device_id, 0)
+            results.append(diag)
+            continue
 
         if critical_counts.get(device_id, 0) >= CRITICAL_THRESHOLD and current_mode != "repeater":
             send_command(device_id, "repeater")

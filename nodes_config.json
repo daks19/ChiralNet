@@ -3,11 +3,10 @@
 
   "floor_width": 12,
   "floor_height": 8,
-  "floor_label": "Your building layout (edit floor_width/floor_height to match real dimensions in meters)",
+  "floor_label": "ChiralNet RSSI Heatmap",
 
   "nodes": {
-    "B4BFE90E08E4": { "label": "Node 1", "x": 2, "y": 2 },
-    "A4F00F6195B4": { "label": "Node 2 (rough - fine-tune)", "x": 9, "y": 2 },
-    "6809479B7E38": { "label": "Node 3 (rough - fine-tune)", "x": 5.5, "y": 6.5 }
+    "B85E78802A58": { "label": "Node 1", "x": 2, "y": 2 },
+    "387E9B470968": { "label": "Node 2", "x": 9, "y": 2 }
   }
 }

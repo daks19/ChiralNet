@@ -710,7 +710,7 @@ async function refreshTable() {
       </tr></thead><tbody>`;
 
     for (const r of rows) {
-      const mode = nodeModes[r.device_id] || "monitor";
+      const mode = r.mode || nodeModes[r.device_id] || "monitor";
       const ts = r.received_at ? r.received_at.replace("T"," ").split(".")[0] : "—";
       html += `<tr>
         <td class="device-id">${r.device_id}</td>
