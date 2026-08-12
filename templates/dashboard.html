@@ -2,126 +2,700 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ChiralNet Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChiralNet · Live Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg: #0f172a;
-    --panel: #1e293b;
-    --border: #334155;
-    --text: #e2e8f0;
-    --muted: #94a3b8;
-    --good: #22c55e;
-    --warn: #eab308;
-    --bad: #ef4444;
+    --bg:       #04080f;
+    --surface:  rgba(8, 18, 36, 0.85);
+    --border:   rgba(0, 200, 255, 0.12);
+    --border-hi: rgba(0, 200, 255, 0.35);
+    --text:     #e2eaf8;
+    --muted:    #5a7399;
+    --cyan:     #00c8ff;
+    --good:     #00ff99;
+    --warn:     #ffbb00;
+    --bad:      #ff3d6b;
+    --purple:   #a855f7;
+    --glow-c:   rgba(0,200,255,0.18);
+    --glow-g:   rgba(0,255,153,0.18);
+    --glow-b:   rgba(255,61,107,0.2);
   }
-  * { box-sizing: border-box; }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
-    margin: 0;
-    padding: 24px;
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
   }
-  h1 { font-size: 22px; margin-bottom: 4px; }
-  .subtitle { color: var(--muted); margin-bottom: 24px; font-size: 14px; }
-  .layout {
+
+  /* ── Animated grid background ─────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,200,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,200,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: gridDrift 20s linear infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+  @keyframes gridDrift {
+    0%   { background-position: 0 0; }
+    100% { background-position: 40px 40px; }
+  }
+
+  /* Radial glow behind content */
+  body::after {
+    content: '';
+    position: fixed;
+    top: -20vh;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 500px;
+    background: radial-gradient(ellipse, rgba(0,200,255,0.06) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; padding: 24px 28px 48px; max-width: 1600px; margin: 0 auto; }
+
+  /* ── Header ───────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .logo-ring {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    border: 2px solid var(--cyan);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 18px var(--glow-c), inset 0 0 10px rgba(0,200,255,0.1);
+    animation: ringPulse 3s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes ringPulse {
+    0%, 100% { box-shadow: 0 0 18px var(--glow-c), inset 0 0 10px rgba(0,200,255,0.1); }
+    50%       { box-shadow: 0 0 32px rgba(0,200,255,0.45), inset 0 0 16px rgba(0,200,255,0.2); }
+  }
+  .logo-ring svg { color: var(--cyan); }
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    background: linear-gradient(90deg, #fff 30%, var(--cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .live-badge {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--good);
+    border: 1px solid rgba(0,255,153,0.25);
+    background: rgba(0,255,153,0.06);
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  .live-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--good);
+    animation: blink 1.2s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.2;} }
+
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  #live-clock {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+  #packet-counter {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--cyan);
+    background: rgba(0,200,255,0.07);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+
+  /* ── Stat cards ───────────────────────────────────── */
+  .stat-row {
     display: grid;
-    grid-template-columns: 1.1fr 1fr;
-    gap: 20px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+  @media(max-width: 900px) { .stat-row { grid-template-columns: repeat(2, 1fr); } }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    backdrop-filter: blur(12px);
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    cursor: default;
+  }
+  .stat-card:hover {
+    border-color: var(--border-hi);
+    box-shadow: 0 0 24px var(--glow-c);
+  }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    border-radius: 12px 12px 0 0;
+  }
+  .stat-card.sc-cyan::before  { background: linear-gradient(90deg, transparent, var(--cyan), transparent); }
+  .stat-card.sc-green::before { background: linear-gradient(90deg, transparent, var(--good), transparent); }
+  .stat-card.sc-warn::before  { background: linear-gradient(90deg, transparent, var(--warn), transparent); }
+  .stat-card.sc-bad::before   { background: linear-gradient(90deg, transparent, var(--bad),  transparent); }
+  .stat-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .stat-label svg { opacity: 0.6; }
+  .stat-value {
+    font-size: 32px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+  .stat-card.sc-cyan  .stat-value { color: var(--cyan); text-shadow: 0 0 20px rgba(0,200,255,0.5); }
+  .stat-card.sc-green .stat-value { color: var(--good); text-shadow: 0 0 20px rgba(0,255,153,0.5); }
+  .stat-card.sc-warn  .stat-value { color: var(--warn); text-shadow: 0 0 20px rgba(255,187,0,0.5); }
+  .stat-card.sc-bad   .stat-value { color: var(--bad);  text-shadow: 0 0 20px rgba(255,61,107,0.5); }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+  /* ── Panels ───────────────────────────────────────── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    backdrop-filter: blur(12px);
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .panel:hover { border-color: var(--border-hi); }
+  .panel-title {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--border-hi), transparent);
+  }
+
+  /* ── Main grid ────────────────────────────────────── */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 18px;
+    margin-bottom: 18px;
     align-items: start;
   }
-  @media (max-width: 900px) {
-    .layout { grid-template-columns: 1fr; }
+  @media(max-width: 1100px) { .main-grid { grid-template-columns: 1fr; } }
+
+  /* ── Node table ───────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th {
+    text-align: left;
+    padding: 8px 10px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
   }
-  .panel {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
+  td {
+    padding: 10px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    vertical-align: middle;
   }
-  .panel h2 { font-size: 15px; margin: 0 0 12px 0; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; }
+  tr { transition: background 0.15s; }
+  tbody tr:hover { background: rgba(0,200,255,0.04); }
   .rssi-good { color: var(--good); font-weight: 600; }
   .rssi-warn { color: var(--warn); font-weight: 600; }
-  .rssi-bad { color: var(--bad); font-weight: 600; }
-  img#heatmap { width: 100%; border-radius: 6px; display: block; }
-  .empty-state { color: var(--muted); font-size: 13px; padding: 20px 0; }
-  .status-dot {
-    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-    background: var(--good); margin-right: 6px; animation: pulse 2s infinite;
-  }
-  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .rssi-bad  { color: var(--bad);  font-weight: 600; }
+  .device-id { color: var(--cyan); font-weight: 600; }
+  .ssid-cell { color: var(--text); opacity: 0.75; }
 
+  /* Pill mode badge */
+  .mode-btn {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: all 0.2s;
+  }
+  .mode-btn.monitor  { background: rgba(0,200,255,0.12); color: var(--cyan);  border: 1px solid rgba(0,200,255,0.25); }
+  .mode-btn.repeater { background: rgba(168,85,247,0.15); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
+  .mode-btn:hover    { filter: brightness(1.3); transform: scale(1.05); }
+
+  .table-footnote { font-size: 11px; color: var(--muted); margin-top: 12px; line-height: 1.6; }
+
+  /* ── Heatmap ──────────────────────────────────────── */
+  .heatmap-wrap {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(0,0,0,0.3);
+  }
+  #heatmap { width: 100%; display: block; border-radius: 8px; }
+  /* Scanning line overlay */
+  .scan-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(0,200,255,0.08) 49%,
+      rgba(0,200,255,0.18) 50%,
+      rgba(0,200,255,0.08) 51%,
+      transparent 100%
+    );
+    background-size: 100% 200%;
+    animation: scan 4s linear infinite;
+  }
+  @keyframes scan {
+    0%   { background-position: 0 -100%; }
+    100% { background-position: 0 200%; }
+  }
+  /* Corner brackets */
+  .heatmap-wrap::before, .heatmap-wrap::after {
+    content: '';
+    position: absolute;
+    width: 20px; height: 20px;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .heatmap-wrap::before {
+    top: 6px; left: 6px;
+    border-top: 2px solid var(--cyan);
+    border-left: 2px solid var(--cyan);
+  }
+  .heatmap-wrap::after {
+    bottom: 6px; right: 6px;
+    border-bottom: 2px solid var(--cyan);
+    border-right: 2px solid var(--cyan);
+  }
+
+  /* ── Diagnostics ──────────────────────────────────── */
+  .diag-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
   .diag-card {
+    background: rgba(4, 10, 22, 0.7);
     border: 1px solid var(--border);
-    border-left: 4px solid var(--muted);
-    border-radius: 6px;
-    padding: 12px 14px;
-    margin-bottom: 12px;
-    background: #16213a;
+    border-radius: 10px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
   }
-  .diag-card.good { border-left-color: var(--good); }
-  .diag-card.warning { border-left-color: var(--warn); }
-  .diag-card.critical { border-left-color: var(--bad); }
-  .diag-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-  .diag-device { font-size: 12px; color: var(--muted); }
-  .diag-title { font-size: 15px; font-weight: 700; }
-  .diag-confidence { font-size: 12px; color: var(--muted); }
-  .diag-reasoning { font-size: 12px; color: var(--muted); margin: 6px 0; }
-  .diag-reasoning span { display: inline-block; margin-right: 12px; }
+  .diag-card:hover { transform: translateY(-2px); }
+  .diag-card.good     { border-left: 3px solid var(--good); }
+  .diag-card.warning  { border-left: 3px solid var(--warn); }
+  .diag-card.critical { border-left: 3px solid var(--bad);  box-shadow: 0 0 20px rgba(255,61,107,0.15); }
+  .diag-card.good:hover     { box-shadow: 0 0 20px var(--glow-g); }
+  .diag-card.warning:hover  { box-shadow: 0 0 20px rgba(255,187,0,0.15); }
+  .diag-card.critical:hover { box-shadow: 0 0 28px rgba(255,61,107,0.25); }
+  /* Pulsing critical indicator */
+  .diag-card.critical::after {
+    content: '';
+    position: absolute;
+    top: 10px; right: 10px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--bad);
+    animation: blink 0.8s ease-in-out infinite;
+    box-shadow: 0 0 8px var(--bad);
+  }
+  .diag-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+  .diag-device { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+  .diag-title { font-size: 14px; font-weight: 700; }
+  .diag-card.good     .diag-title { color: var(--good); }
+  .diag-card.warning  .diag-title { color: var(--warn); }
+  .diag-card.critical .diag-title { color: var(--bad);  }
+  .diag-conf-wrap { text-align: right; flex-shrink: 0; }
+  .diag-conf-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .diag-conf-val { font-size: 18px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+  /* Confidence bar */
+  .conf-bar-bg {
+    height: 3px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    margin: 8px 0;
+    overflow: hidden;
+  }
+  .conf-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s ease;
+  }
+  .diag-card.good     .conf-bar-fill { background: var(--good); }
+  .diag-card.warning  .conf-bar-fill { background: var(--warn); }
+  .diag-card.critical .conf-bar-fill { background: var(--bad);  }
+  .diag-reasons { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+  .diag-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.05);
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
   .diag-action {
-    font-size: 13px; margin-top: 8px; padding-top: 8px;
-    border-top: 1px solid var(--border);
+    font-size: 11.5px;
+    color: var(--text);
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    opacity: 0.8;
   }
-  .diag-action strong { color: var(--text); }
+
+  /* ── Bottom row (trend + log) ─────────────────────── */
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 18px;
+    margin-top: 18px;
+  }
+  @media(max-width: 1100px) { .bottom-grid { grid-template-columns: 1fr; } }
+
+  /* Trend node buttons */
+  .node-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .node-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-hi);
+    background: transparent;
+    color: var(--cyan);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .node-btn:hover, .node-btn.active {
+    background: rgba(0,200,255,0.12);
+    box-shadow: 0 0 12px var(--glow-c);
+  }
+
+  /* ── Auto-trigger log (terminal style) ───────────── */
+  .log-terminal {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    min-height: 120px;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .log-terminal::-webkit-scrollbar { width: 4px; }
+  .log-terminal::-webkit-scrollbar-track { background: transparent; }
+  .log-terminal::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
+  .log-line {
+    display: flex;
+    gap: 10px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    animation: fadeSlide 0.4s ease;
+  }
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .log-time { color: var(--muted); flex-shrink: 0; }
+  .log-text.repeater { color: var(--warn); }
+  .log-text.monitor  { color: var(--good); }
+  .log-text.default  { color: var(--text); opacity: 0.7; }
+
+  .log-empty { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .log-cursor {
+    display: inline-block;
+    width: 7px; height: 13px;
+    background: var(--cyan);
+    animation: blink 1s step-end infinite;
+    vertical-align: middle;
+    margin-left: 4px;
+    opacity: 0.7;
+  }
+
+  /* ── Empty state ──────────────────────────────────── */
+  .empty-state {
+    color: var(--muted);
+    font-size: 12px;
+    padding: 24px 0;
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .empty-state::before { content: '›'; color: var(--cyan); font-size: 16px; }
+
+  /* Spinner for heatmap loading */
+  .heatmap-loading {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(4,8,15,0.6);
+    border-radius: 8px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+  }
+  .heatmap-loading.show { opacity: 1; }
+  .spinner {
+    width: 24px; height: 24px;
+    border: 2px solid var(--border);
+    border-top-color: var(--cyan);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Flash effect when data updates */
+  @keyframes dataFlash {
+    0%   { border-color: var(--cyan); box-shadow: 0 0 12px var(--glow-c); }
+    100% { border-color: var(--border); box-shadow: none; }
+  }
+  .flash { animation: dataFlash 0.5s ease forwards; }
+  .swarm-btn {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, var(--cyan), #0088ff);
+    border: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 0 0 12px var(--glow-c);
+    transition: all 0.2s;
+  }
+  .swarm-btn:hover {
+    box-shadow: 0 0 20px rgba(0,200,255,0.4);
+    transform: translateY(-1px);
+  }
+  .swarm-btn:active {
+    transform: translateY(0);
+  }
+  .swarm-btn.active {
+    background: linear-gradient(135deg, var(--good), #00cc66);
+    box-shadow: 0 0 12px var(--glow-g);
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
+<div class="app">
 
-  <h1><span class="status-dot"></span>ChiralNet Live Dashboard</h1>
-  <div class="subtitle">Auto-refreshes every 1 second &middot; reading from chiralnet.db</div>
+  <!-- Header -->
+  <header>
+    <div class="header-left">
+      <div class="logo-ring">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M12 2a10 10 0 0 1 0 20A10 10 0 0 1 12 2"/>
+          <path d="M12 6a6 6 0 0 1 0 12 6 6 0 0 1 0-12"/>
+        </svg>
+      </div>
+      <div>
+        <h1>ChiralNet</h1>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;letter-spacing:0.03em;">Mesh Intelligence Dashboard</div>
+      </div>
+      <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+    </div>
+    <div class="header-right">
+      <button id="swarm-btn" class="swarm-btn" onclick="triggerSwarm()">⚡ Swarm Provision New Nodes</button>
+      <span id="packet-counter">Packets Rx: 0</span>
+      <span id="live-clock">00:00:00</span>
+    </div>
+  </header>
 
-  <div class="layout">
+  <!-- Stat Cards -->
+  <div class="stat-row">
+    <div class="stat-card sc-cyan">
+      <div class="stat-label">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        Active Nodes
+      </div>
+      <div class="stat-value" id="stat-nodes">—</div>
+      <div class="stat-sub">devices reporting</div>
+    </div>
+    <div class="stat-card sc-green">
+      <div class="stat-label">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 6l5 5 4-4 7 7 6-6"/></svg>
+        Avg RSSI
+      </div>
+      <div class="stat-value" id="stat-rssi">—</div>
+      <div class="stat-sub">dBm across mesh</div>
+    </div>
+    <div class="stat-card sc-warn">
+      <div class="stat-label">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+        Avg Latency
+      </div>
+      <div class="stat-value" id="stat-latency">—</div>
+      <div class="stat-sub">ms rolling avg</div>
+    </div>
+    <div class="stat-card sc-bad">
+      <div class="stat-label">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Critical Alerts
+      </div>
+      <div class="stat-value" id="stat-alerts">—</div>
+      <div class="stat-sub">nodes in distress</div>
+    </div>
+  </div>
+
+  <!-- Main grid: table + heatmap -->
+  <div class="main-grid">
+    <div class="panel" id="table-panel">
+      <div class="panel-title">Live Node Telemetry</div>
+      <div id="table-container"><div class="empty-state">Waiting for nodes to report…</div></div>
+    </div>
+
     <div class="panel">
-      <h2>Live Node Metrics</h2>
-      <div id="table-container">
-        <div class="empty-state">Waiting for data...</div>
+      <div class="panel-title">RSSI Signal Heatmap</div>
+      <div class="heatmap-wrap">
+        <img id="heatmap" src="/api/heatmap.png" alt="RSSI heatmap">
+        <div class="scan-overlay"></div>
+        <div class="heatmap-loading" id="heatmap-loader"><div class="spinner"></div></div>
       </div>
     </div>
+  </div>
+
+  <!-- Diagnostics -->
+  <div class="panel">
+    <div class="panel-title">Diagnostic Engine — Root Cause Analysis</div>
+    <div class="diag-grid" id="diagnosis-container">
+      <div class="empty-state">Waiting for first telemetry cycle…</div>
+    </div>
+  </div>
+
+  <!-- Bottom: trend chart + auto-trigger log -->
+  <div class="bottom-grid">
+    <div class="panel">
+      <div class="panel-title">Signal Trend</div>
+      <div class="node-btns" id="trend-buttons"></div>
+      <canvas id="trendChart" height="90"></canvas>
+    </div>
 
     <div class="panel">
-      <h2>RSSI Heatmap</h2>
-      <img id="heatmap" src="/api/heatmap.png" alt="RSSI heatmap">
+      <div class="panel-title">Auto-Trigger Event Log</div>
+      <div class="log-terminal" id="auto-log-container">
+        <div class="log-empty">No events yet.<span class="log-cursor"></span></div>
+      </div>
     </div>
   </div>
 
-  <div class="panel" style="margin-top: 20px;">
-    <h2>Diagnostic Engine — Root Cause Analysis</h2>
-    <div id="diagnosis-container">
-      <div class="empty-state">Waiting for data...</div>
-    </div>
-  </div>
+</div><!-- /app -->
 
 <script>
+// ── Helpers ──────────────────────────────────────────────────────────
 function rssiClass(rssi) {
   if (rssi >= -60) return "rssi-good";
   if (rssi >= -75) return "rssi-warn";
   return "rssi-bad";
 }
-
 function fmt(val, suffix) {
-  if (val === null || val === undefined) return "-";
+  if (val === null || val === undefined) return "—";
   return val + (suffix || "");
 }
 
+// ── Live clock ────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById("live-clock").textContent =
+    now.toLocaleTimeString("en-GB", { hour12: false }) + " IST";
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Packet counter ────────────────────────────────────────────────────
+let totalPackets = 0;
+function bumpPackets(n) {
+  totalPackets += n;
+  document.getElementById("packet-counter").textContent = `PKT ${totalPackets.toString().padStart(5, "0")}`;
+}
+
+// ── Stat cards ────────────────────────────────────────────────────────
+function animateValue(el, target, suffix) {
+  const start = parseFloat(el.dataset.val || "0") || 0;
+  const startTime = performance.now();
+  const duration = 500;
+  el.dataset.val = target;
+  function step(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    const v = start + (target - start) * (1 - Math.pow(1 - t, 3));
+    el.textContent = Number.isInteger(target) ? Math.round(v) + (suffix || "") : v.toFixed(1) + (suffix || "");
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// ── Node table ────────────────────────────────────────────────────────
+const nodeModes = {};
+
 async function refreshTable() {
   try {
-    const res = await fetch("/api/latest");
-    const rows = await res.json();
-    const container = document.getElementById("table-container");
+    const rows = await fetch("/api/latest").then(r => r.json());
+    bumpPackets(rows.length);
 
+    // Update stat cards
+    const nodeEl    = document.getElementById("stat-nodes");
+    const rssiEl    = document.getElementById("stat-rssi");
+    const latEl     = document.getElementById("stat-latency");
+    const alertEl   = document.getElementById("stat-alerts");
+
+    animateValue(nodeEl, rows.length, "");
+
+    if (rows.length) {
+      const avgRssi = rows.reduce((s,r) => s + (r.rssi || 0), 0) / rows.length;
+      const latRows = rows.filter(r => r.avg_latency_ms != null);
+      const avgLat  = latRows.length
+        ? latRows.reduce((s,r) => s + r.avg_latency_ms, 0) / latRows.length : 0;
+      animateValue(rssiEl, Math.round(avgRssi), " dBm");
+      animateValue(latEl,  Math.round(avgLat),  " ms");
+    }
+
+    const container = document.getElementById("table-container");
     if (!rows.length) {
       container.innerHTML = '<div class="empty-state">No readings yet — waiting for a node to publish.</div>';
       return;
@@ -130,78 +704,288 @@ async function refreshTable() {
     let html = `<table>
       <thead><tr>
         <th>Device</th><th>SSID</th><th>RSSI</th>
-        <th>Latency (last)</th><th>Latency (avg 10)</th>
-        <th>Loss (last)</th><th>Loss (avg 10)</th>
-        <th>APs</th><th>Last seen</th>
+        <th>Latency</th><th>Avg Latency</th>
+        <th>Loss</th><th>Avg Loss</th>
+        <th>APs</th><th>Mode</th><th>Last seen</th>
       </tr></thead><tbody>`;
 
     for (const r of rows) {
+      const mode = nodeModes[r.device_id] || "monitor";
+      const ts = r.received_at ? r.received_at.replace("T"," ").split(".")[0] : "—";
       html += `<tr>
-        <td>${r.device_id}</td>
-        <td>${r.ssid ?? "-"}</td>
+        <td class="device-id">${r.device_id}</td>
+        <td class="ssid-cell">${r.ssid ?? "—"}</td>
         <td class="${rssiClass(r.rssi)}">${fmt(r.rssi, " dBm")}</td>
         <td>${fmt(r.latency_ms, " ms")}</td>
         <td>${fmt(r.avg_latency_ms, " ms")}</td>
         <td>${fmt(r.packet_loss, "%")}</td>
         <td>${fmt(r.avg_packet_loss, "%")}</td>
         <td>${fmt(r.nearby_aps)}</td>
-        <td>${r.received_at ? r.received_at.split(".")[0] : "-"}</td>
+        <td>
+          <button class="mode-btn ${mode}" onclick="toggleMode('${r.device_id}','${mode}')">
+            ${mode === "repeater" ? "↩ Monitor" : "⇌ Repeater"}
+          </button>
+        </td>
+        <td style="color:var(--muted)">${ts}</td>
       </tr>`;
     }
     html += "</tbody></table>";
-    html += `<p style="color:#94a3b8; font-size:12px; margin-top:10px;">
-      "last" = most recent single reading (fast, 1s cycle, noisier since
-      pingCount=1). "avg 10" = rolling average over the last 10 readings
-      per node (smoother, better for diagnosis).</p>`;
+    html += `<p class="table-footnote">
+      <b style="color:var(--text)">last</b> = single reading · <b style="color:var(--text)">avg</b> = rolling mean over 10 readings per node
+    </p>`;
     container.innerHTML = html;
+
+    // flash panel border on update
+    const panel = document.getElementById("table-panel");
+    panel.classList.remove("flash");
+    void panel.offsetWidth;
+    panel.classList.add("flash");
   } catch (e) {
     console.error("Failed to refresh table:", e);
   }
 }
 
+// ── Heatmap ───────────────────────────────────────────────────────────
 function refreshHeatmap() {
-  document.getElementById("heatmap").src = "/api/heatmap.png?t=" + Date.now();
+  const img    = document.getElementById("heatmap");
+  const loader = document.getElementById("heatmap-loader");
+  loader.classList.add("show");
+  const src = "/api/heatmap.png?t=" + Date.now();
+  const tmp = new Image();
+  tmp.onload  = () => { img.src = src; loader.classList.remove("show"); };
+  tmp.onerror = () => { loader.classList.remove("show"); };
+  tmp.src = src;
 }
 
+// ── Diagnostics ───────────────────────────────────────────────────────
 async function refreshDiagnosis() {
   try {
-    const res = await fetch("/api/diagnosis");
-    const diagnoses = await res.json();
+    const diagnoses = await fetch("/api/diagnosis").then(r => r.json());
     const container = document.getElementById("diagnosis-container");
+
+    const critCount = diagnoses.filter(d => d.severity === "critical").length;
+    animateValue(document.getElementById("stat-alerts"), critCount, "");
 
     if (!diagnoses.length) {
       container.innerHTML = '<div class="empty-state">No readings yet.</div>';
       return;
     }
 
-    let html = "";
-    for (const d of diagnoses) {
-      html += `<div class="diag-card ${d.severity}">
-        <div class="diag-header">
+    container.innerHTML = diagnoses.map(d => `
+      <div class="diag-card ${d.severity}">
+        <div class="diag-top">
           <div>
-            <span class="diag-device">${d.device_id} (${d.ssid ?? "-"})</span><br>
-            <span class="diag-title">${d.diagnosis}</span>
+            <div class="diag-device">${d.device_id} · ${d.ssid ?? "—"}</div>
+            <div class="diag-title">${d.diagnosis}</div>
           </div>
-          <div class="diag-confidence">${d.confidence}% confidence</div>
+          <div class="diag-conf-wrap">
+            <div class="diag-conf-label">Confidence</div>
+            <div class="diag-conf-val" style="color:${d.severity==='good'?'var(--good)':d.severity==='warning'?'var(--warn)':'var(--bad)'}">${d.confidence}%</div>
+          </div>
         </div>
-        <div class="diag-reasoning">
-          ${d.reasoning.map(r => `<span>${r}</span>`).join("")}
+        <div class="conf-bar-bg">
+          <div class="conf-bar-fill" style="width:${d.confidence}%"></div>
         </div>
-        <div class="diag-action"><strong>Suggested action:</strong> ${d.action}</div>
-      </div>`;
-    }
-    container.innerHTML = html;
+        <div class="diag-reasons">
+          ${(d.reasoning || []).map(r => `<span class="diag-tag">${r}</span>`).join("")}
+        </div>
+        <div class="diag-action">→ ${d.action}</div>
+      </div>
+    `).join("");
   } catch (e) {
     console.error("Failed to refresh diagnosis:", e);
   }
 }
 
+// ── Trend chart ───────────────────────────────────────────────────────
+let trendChart   = null;
+let selectedDevice = null;
+let knownDevices = new Set();
+
+Chart.defaults.color = "#5a7399";
+Chart.defaults.borderColor = "rgba(255,255,255,0.05)";
+
+async function refreshTrendButtons() {
+  const rows = await fetch("/api/latest").then(r => r.json());
+  const ids = rows.map(r => r.device_id);
+  const changed = ids.length !== knownDevices.size || ids.some(id => !knownDevices.has(id));
+  if (!changed) return;
+  knownDevices = new Set(ids);
+
+  const container = document.getElementById("trend-buttons");
+  container.innerHTML = ids.map(id =>
+    `<button class="node-btn${selectedDevice===id?' active':''}" onclick="selectTrend('${id}')">${id}</button>`
+  ).join("");
+  if (!selectedDevice && ids.length) selectTrend(ids[0]);
+}
+
+async function selectTrend(deviceId) {
+  selectedDevice = deviceId;
+  // Update active state
+  document.querySelectorAll(".node-btn").forEach(b => {
+    b.classList.toggle("active", b.textContent.trim() === deviceId);
+  });
+
+  const data = await fetch(`/api/history/${deviceId}`).then(r => r.json());
+  const labels  = data.map(d => d.received_at ? d.received_at.split("T")[1]?.split(".")[0] : "");
+  const rssi    = data.map(d => d.rssi);
+  const latency = data.map(d => d.latency_ms);
+
+  if (trendChart) trendChart.destroy();
+
+  const ctx = document.getElementById("trendChart").getContext("2d");
+
+  // Gradient fills
+  const gGood = ctx.createLinearGradient(0, 0, 0, 200);
+  gGood.addColorStop(0, "rgba(0,255,153,0.25)");
+  gGood.addColorStop(1, "rgba(0,255,153,0)");
+  const gWarn = ctx.createLinearGradient(0, 0, 0, 200);
+  gWarn.addColorStop(0, "rgba(255,187,0,0.2)");
+  gWarn.addColorStop(1, "rgba(255,187,0,0)");
+
+  trendChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "RSSI (dBm)",
+          data: rssi,
+          borderColor: "#00ff99",
+          backgroundColor: gGood,
+          yAxisID: "y",
+          tension: 0.4,
+          fill: true,
+          pointRadius: 2,
+          pointHoverRadius: 5,
+          pointBackgroundColor: "#00ff99",
+          borderWidth: 2,
+        },
+        {
+          label: "Latency (ms)",
+          data: latency,
+          borderColor: "#ffbb00",
+          backgroundColor: gWarn,
+          yAxisID: "y1",
+          tension: 0.4,
+          fill: true,
+          pointRadius: 2,
+          pointHoverRadius: 5,
+          pointBackgroundColor: "#ffbb00",
+          borderWidth: 2,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: {
+          labels: { color: "#5a7399", font: { family: "JetBrains Mono", size: 11 }, boxWidth: 12 }
+        },
+        tooltip: {
+          backgroundColor: "rgba(4,10,22,0.95)",
+          borderColor: "rgba(0,200,255,0.25)",
+          borderWidth: 1,
+          titleFont: { family: "JetBrains Mono", size: 11 },
+          bodyFont:  { family: "JetBrains Mono", size: 11 },
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: "#5a7399", font: { family: "JetBrains Mono", size: 10 }, maxTicksLimit: 8 },
+          grid:  { color: "rgba(255,255,255,0.04)" }
+        },
+        y: {
+          type: "linear", position: "left",
+          title: { display: true, text: "dBm", color: "#00ff99", font: { family: "JetBrains Mono", size: 10 } },
+          ticks: { color: "#00ff99", font: { family: "JetBrains Mono", size: 10 } },
+          grid:  { color: "rgba(255,255,255,0.04)" }
+        },
+        y1: {
+          type: "linear", position: "right",
+          title: { display: true, text: "ms", color: "#ffbb00", font: { family: "JetBrains Mono", size: 10 } },
+          ticks: { color: "#ffbb00", font: { family: "JetBrains Mono", size: 10 } },
+          grid:  { drawOnChartArea: false }
+        }
+      }
+    }
+  });
+}
+
+// ── Auto-trigger log ──────────────────────────────────────────────────
+let prevLogLen = 0;
+async function refreshAutoLog() {
+  try {
+    const log = await fetch("/api/auto-log").then(r => r.json());
+    const container = document.getElementById("auto-log-container");
+    if (!log.length) {
+      container.innerHTML = '<div class="log-empty">Monitoring…<span class="log-cursor"></span></div>';
+      return;
+    }
+    if (log.length === prevLogLen) return;
+    prevLogLen = log.length;
+
+    const now = new Date().toLocaleTimeString("en-GB", { hour12: false });
+    container.innerHTML = log.slice().reverse().map(entry => {
+      const cls = entry.includes("REPEATER") ? "repeater"
+                : entry.includes("MONITOR")  ? "monitor" : "default";
+      return `<div class="log-line">
+        <span class="log-time">${now}</span>
+        <span class="log-text ${cls}">${entry}</span>
+      </div>`;
+    }).join("") + '<div style="height:4px"></div><span class="log-cursor"></span>';
+  } catch (e) {
+    console.error("Auto-log error:", e);
+  }
+}
+
+// ── Mode toggle ───────────────────────────────────────────────────────
+async function toggleMode(deviceId, currentMode) {
+  const newMode = currentMode === "repeater" ? "monitor" : "repeater";
+  try {
+    await fetch(`/api/set-mode/${deviceId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: newMode })
+    });
+    nodeModes[deviceId] = newMode;
+    refreshTable();
+  } catch (e) {
+    console.error("Mode switch failed:", e);
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
 refreshTable();
 refreshDiagnosis();
-setInterval(refreshTable, 1000);
-setInterval(refreshHeatmap, 1000);
-setInterval(refreshDiagnosis, 1000);
-</script>
+refreshTrendButtons();
+refreshAutoLog();
 
+setInterval(refreshTable,        1000);
+setInterval(refreshHeatmap,      3000);
+setInterval(refreshDiagnosis,    2000);
+setInterval(refreshTrendButtons, 3000);
+setInterval(refreshAutoLog,      2000);
+setInterval(() => { if (selectedDevice) selectTrend(selectedDevice); }, 5000);
+
+async function triggerSwarm() {
+  const btn = document.getElementById("swarm-btn");
+  btn.innerText = "⏳ Starting Swarm...";
+  btn.classList.add("active");
+  try {
+    await fetch("/api/swarm", { method: "POST" });
+    btn.innerText = "✓ Swarm Active (5m)";
+    setTimeout(() => {
+      btn.innerText = "⚡ Swarm Provision New Nodes";
+      btn.classList.remove("active");
+    }, 300000);
+  } catch (e) {
+    console.error(e);
+    btn.innerText = "❌ Failed";
+    btn.classList.remove("active");
+  }
+}
+</script>
 </body>
 </html>

@@ -23,10 +23,10 @@ You currently have 1 real device (`B4BFE90E08E4`). The other two entries in
 the config are placeholders for nodes 2 and 3 — update them once those are
 flashed and deployed (Step 8).
 
-**Note:** the interpolated color heatmap needs 3+ known node positions to
-draw properly (it can't triangulate a smooth gradient from only 1-2 points).
-With fewer, you'll still see the raw node markers/readings, just without the
-color fill until you add more nodes.
+**Note:** the heatmap can still render if a node is active but not yet listed
+in `nodes_config.json`; the dashboard will place that node provisionally so you
+still get a visible map. For the most accurate layout, add the real device IDs
+and positions for every physical node.
 
 ## 2. Try it with fake data first (optional, no hardware needed)
 
