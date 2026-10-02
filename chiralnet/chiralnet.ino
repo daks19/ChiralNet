@@ -6,6 +6,10 @@
 #include <PubSubClient.h>
 #include <HTTPClient.h>
 
+// NAPT / IP-forwarding  (ESP32 Arduino core 3.3.11 / ESP-IDF 5.x)
+// Confirmed in sdkconfig: CONFIG_LWIP_IP_FORWARD=y, CONFIG_LWIP_IPV4_NAPT=y
+#include "lwip/lwip_napt.h"
+
 Preferences prefs;
 WebServer configServer(80);
 
@@ -14,7 +18,12 @@ const int mqtt_port = 1883;
 const char* mqtt_topic = "chiralnet/telemetry";
 
 const char* repeater_ap_ssid_prefix = "ChiralNet-Relay-";
-const char* repeater_ap_password = "chiralnet123";
+const char* repeater_ap_password    = "chiralnet123";
+
+// Dedicated relay subnet — avoids collisions with the upstream 192.168.x.x LAN
+static const IPAddress RELAY_AP_IP      (192, 168, 50, 1);
+static const IPAddress RELAY_AP_GATEWAY (192, 168, 50, 1);
+static const IPAddress RELAY_AP_SUBNET  (255, 255, 255, 0);
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -23,7 +32,10 @@ IPAddress pingTarget;
 String deviceID;
 String commandTopic;
 String currentMode = "monitor";
-bool staConnected = false;
+String targetMode  = "monitor";
+bool pendingModeChange = false;
+bool staConnected  = false;
+bool natEnabled    = false;   // tracks whether ip_napt_enable was called
 
 bool isSwarmMaster = false;
 unsigned long swarmStartTime = 0;
@@ -119,6 +131,60 @@ void startSetupAP() {
 }
 
 // ---------------------------------------------------------------
+// NAPT helpers
+// ---------------------------------------------------------------
+// Relay SoftAP + NAPT (ESP32 Arduino Core 3.3.11 / ESP-IDF 5.x)
+// ---------------------------------------------------------------
+void startRepeaterAP() {
+  Serial.println("\n[Relay] Starting Repeater SoftAP + NAPT...");
+
+  IPAddress ap_ip(192, 168, 50, 1);
+  IPAddress ap_mask(255, 255, 255, 0);
+  IPAddress ap_leaseStart(192, 168, 50, 2);
+  IPAddress ap_dns = WiFi.dnsIP();
+  if (ap_dns == IPAddress(0, 0, 0, 0)) ap_dns = IPAddress(8, 8, 8, 8);
+
+  WiFi.AP.begin();
+  WiFi.AP.config(ap_ip, ap_ip, ap_mask, ap_leaseStart, ap_dns);
+
+  String apName = repeater_ap_ssid_prefix + deviceID;
+  bool created = WiFi.AP.create(apName.c_str(), repeater_ap_password);
+  if (!created) {
+    WiFi.softAP(apName.c_str(), repeater_ap_password);
+  }
+
+  WiFi.AP.waitStatusBits(ESP_NETIF_STARTED_BIT, 2000);
+
+  bool apStarted = WiFi.AP.started();
+  Serial.print("[Relay] Repeater AP status: ");
+  Serial.println(apStarted ? "BROADCASTING" : "FAILED");
+  Serial.print("[Relay] SSID: ");
+  Serial.println(apName);
+  Serial.print("[Relay] Gateway IP: ");
+  Serial.println(WiFi.softAPIP());
+  Serial.print("[Relay] Radio Channel: ");
+  Serial.println(WiFi.channel());
+
+  if (apStarted) {
+    WiFi.AP.enableNAPT(true);
+    ip_napt_enable((uint32_t)RELAY_AP_IP, 1);
+    natEnabled = true;
+    Serial.println("[Relay] NAPT Router: ENABLED (Clients will have internet access)");
+  } else {
+    Serial.println("[Relay] ERROR: AP failed to start!");
+  }
+}
+
+void stopRepeaterAP() {
+  Serial.println("\n[Relay] Stopping Repeater SoftAP + NAPT...");
+  WiFi.AP.enableNAPT(false);
+  ip_napt_enable((uint32_t)RELAY_AP_IP, 0);
+  natEnabled = false;
+  WiFi.AP.end();
+  Serial.println("[Relay] AP stopped. Returned to pure Monitor mode.");
+}
+
+// ---------------------------------------------------------------
 // MQTT / telemetry
 // ---------------------------------------------------------------
 void onMqttMessage(char* topic, byte* payload, unsigned int length) {
@@ -129,26 +195,24 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   Serial.print("Command received: ");
   Serial.println(msg);
 
-  if (msg == "repeater" && currentMode != "repeater") {
-    currentMode = "repeater";
-    WiFi.mode(WIFI_AP_STA);
-    String apName = repeater_ap_ssid_prefix + deviceID;
-    int curChannel = WiFi.channel();
-    if (curChannel == 0) curChannel = 1;
-    bool apRes = WiFi.softAP(apName.c_str(), repeater_ap_password, curChannel);
-    Serial.print("Repeater AP start result: ");
-    Serial.print(apRes ? "SUCCESS: " : "FAILED: ");
-    Serial.println(apName);
-  } else if (msg == "monitor" && currentMode != "monitor") {
-    currentMode = "monitor";
-    if (!isSwarmMaster) {
-      WiFi.softAPdisconnect(true);
-      WiFi.mode(WIFI_STA);
-      connectWiFi();
+  // -------- REPEATER mode --------
+  if (msg == "repeater") {
+    if (currentMode != "repeater" || !WiFi.AP.started()) {
+      targetMode = "repeater";
+      pendingModeChange = true;
     }
+
+  // -------- MONITOR mode --------
+  } else if (msg == "monitor") {
+    if (currentMode != "monitor" || WiFi.AP.started()) {
+      targetMode = "monitor";
+      pendingModeChange = true;
+    }
+
+  // -------- SWARM mode --------
   } else if (msg == "swarm") {
     Serial.println("Starting Swarm Provisioning AP for 5 minutes...");
-    isSwarmMaster = true;
+    isSwarmMaster  = true;
     swarmStartTime = millis();
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAP("ChiralNet-Prov", "meshprov123");
@@ -175,7 +239,7 @@ void connectMQTT() {
 }
 
 int scanNearbyAPs() {
-  if (currentMode == "repeater") return 0; // Skip scanning in AP mode to prevent AP drop
+  if (currentMode == "repeater" || WiFi.AP.started()) return 0; // Skip scanning in AP mode to prevent AP drop
   return WiFi.scanNetworks(false, false, false, 150);
 }
 
@@ -275,9 +339,11 @@ void setup() {
   Serial.println("\n\n========== ChiralNet Node Booting ==========");
 
   prefs.begin("chiralnet", false);
-  cfgSSID = prefs.getString("ssid", "");
-  cfgPassword = prefs.getString("password", "");
+  cfgSSID       = prefs.getString("ssid", "");
+  cfgPassword   = prefs.getString("password", "");
   cfgMqttServer = prefs.getString("mqtt", "");
+  currentMode   = prefs.getString("mode", "monitor");  // restore last saved mode
+  targetMode    = currentMode;
 
   uint64_t chipid = ESP.getEfuseMac();
   char macBuf[13];
@@ -288,6 +354,8 @@ void setup() {
   WiFi.mode(WIFI_STA); 
   Serial.print("Device ID: ");
   Serial.println(deviceID);
+  Serial.print("Boot Mode: ");
+  Serial.println(currentMode);
   Serial.print("Saved SSID: ");
   Serial.println(cfgSSID.length() > 0 ? cfgSSID : "(none)");
   Serial.print("Saved MQTT: ");
@@ -318,11 +386,17 @@ void setup() {
     }
   }
 
-  startConfigServer(); 
+  startConfigServer();
 
   if (staConnected && cfgMqttServer.length() > 0) {
     client.setServer(cfgMqttServer.c_str(), mqtt_port);
     client.setCallback(onMqttMessage);
+  }
+
+  // Auto-restore repeater AP + NAT if that was the mode before this reboot
+  if (staConnected && currentMode == "repeater") {
+    Serial.println("Saved mode is REPEATER — restoring relay AP + NAT...");
+    startRepeaterAP();
   }
 
   Serial.println("========== Setup complete ==========");
@@ -330,6 +404,20 @@ void setup() {
 
 void loop() {
   configServer.handleClient(); 
+
+  // Process mode changes outside the MQTT callback context
+  if (pendingModeChange) {
+    pendingModeChange = false;
+    if (targetMode == "repeater") {
+      currentMode = "repeater";
+      prefs.putString("mode", "repeater");
+      startRepeaterAP();
+    } else if (targetMode == "monitor") {
+      currentMode = "monitor";
+      prefs.putString("mode", "monitor");
+      stopRepeaterAP();
+    }
+  }
 
   // Auto-disable Swarm Master AP after 5 minutes to clean up airwaves
   if (isSwarmMaster && (millis() - swarmStartTime > 300000)) {
@@ -343,7 +431,7 @@ void loop() {
 
   if (!staConnected) return; 
 
-  if (currentMode == "monitor" && WiFi.status() != WL_CONNECTED) {
+  if (currentMode == "monitor" && !WiFi.AP.started() && WiFi.status() != WL_CONNECTED) {
     connectWiFi();
   }
 

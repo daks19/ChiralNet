@@ -257,21 +257,52 @@
   .device-id { color: var(--cyan); font-weight: 600; }
   .ssid-cell { color: var(--text); opacity: 0.75; }
 
-  /* Pill mode badge */
-  .mode-btn {
+  /* ── Mode toggle pill ──────────────────────────────── */
+  .mode-toggle {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.12);
+    cursor: pointer;
     font-family: 'Inter', sans-serif;
     font-size: 10px;
-    font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 20px;
-    border: none;
-    cursor: pointer;
-    letter-spacing: 0.04em;
-    transition: all 0.2s;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    transition: box-shadow 0.2s;
+    white-space: nowrap;
+    background: #111a26;
   }
-  .mode-btn.monitor  { background: rgba(0,200,255,0.12); color: var(--cyan);  border: 1px solid rgba(0,200,255,0.25); }
-  .mode-btn.repeater { background: rgba(168,85,247,0.15); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
-  .mode-btn:hover    { filter: brightness(1.3); transform: scale(1.05); }
+  .mode-toggle:hover { box-shadow: 0 0 0 2px rgba(255,255,255,0.2); }
+
+  .mode-toggle .seg {
+    padding: 5px 11px;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  /* Monitor segment — inactive */
+  .mode-toggle .seg-monitor {
+    background: transparent;
+    color: #3a5070;
+    border-right: 1px solid rgba(255,255,255,0.08);
+  }
+  /* Monitor segment — ACTIVE */
+  .mode-toggle.is-monitor .seg-monitor {
+    background: #00b8e6;
+    color: #000;
+    border-right: 1px solid transparent;
+  }
+
+  /* Repeater segment — inactive */
+  .mode-toggle .seg-repeater {
+    background: transparent;
+    color: #3a5070;
+  }
+  /* Repeater segment — ACTIVE */
+  .mode-toggle.is-repeater .seg-repeater {
+    background: #8b3cf7;
+    color: #fff;
+  }
 
   .table-footnote { font-size: 11px; color: var(--muted); margin-top: 12px; line-height: 1.6; }
 
@@ -722,8 +753,8 @@ async function refreshTable() {
         <td>${fmt(r.avg_packet_loss, "%")}</td>
         <td>${fmt(r.nearby_aps)}</td>
         <td>
-          <button class="mode-btn ${mode}" onclick="toggleMode('${r.device_id}','${mode}')">
-            ${mode === "repeater" ? "↩ Monitor" : "⇌ Repeater"}
+          <button class="mode-toggle is-${mode}" onclick="toggleMode('${r.device_id}','${mode}')" title="Click to switch to ${mode === 'repeater' ? 'monitor' : 'repeater'} mode">
+            <span class="seg seg-monitor">⬤ Monitor</span><span class="seg seg-repeater">⬤ Repeater</span>
           </button>
         </td>
         <td style="color:var(--muted)">${ts}</td>
